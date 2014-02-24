@@ -1,210 +1,234 @@
 /*
- * (C) Emiel Mols, 2012. Released under the Simplified BSD License.
- * Attribution is very much appreciated.
+ *   Copyright 2014 Florian Schäfer <florian.schaefer@gmail.com>
+ *   Copyright 2012 Emiel Mols <emiel@paiq.nl>
+ *
+ *   Redistribution and use in source and binary forms, with or without modification, are
+ *   permitted provided that the following conditions are met:
+ *
+ *      1. Redistributions of source code must retain the above copyright notice, this list of
+ *         conditions and the following disclaimer.
+ *
+ *      2. Redistributions in binary form must reproduce the above copyright notice, this list
+ *         of conditions and the following disclaimer in the documentation and/or other materials
+ *         provided with the distribution.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY <COPYRIGHT HOLDER> ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ *   FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> OR
+ *   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ *   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ *   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ *   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ *   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *   The views and conclusions contained in the software and documentation are those of the
+ *   authors and should not be interpreted as representing official policies, either expressed
+ *   or implied, of the copyright holders.
  */
 
-#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <inttypes.h>
+#include <string.h>
 #include <getopt.h>
 
-#include <zmq.h>
+#include <czmq.h>
+
+void
+zmqcat_recv(void* socket, int type, FILE *pipe, int verbose)
+{
+    if (type == ZMQ_PUSH || type == ZMQ_PUB) {
+        return;
+    }
+
+    char *msg = NULL;
+    int msg_len = 0;
+
+    msg = zstr_recv(socket);
+
+    if (msg) {
+        msg_len = strlen(msg);
+
+        if (verbose) {
+            fprintf(stderr, "receiving %d bytes: %s\n", msg_len, msg);
+        }
+
+        fwrite(msg, 1, msg_len, pipe);
+        free(msg);
+    }
+}
 
 #define SEND_BUFFER_SIZE 8192
 
-void zmqcat_recv(void* socket, int type, int verbose) {
+void
+zmqcat_send(void* socket, int type, FILE *pipe, int verbose)
+{
+    if (type == ZMQ_PULL || type == ZMQ_SUB) {
+        return;
+    }
 
-	if (type == ZMQ_PUSH || type == ZMQ_PUB)
-		return;
+    char *msg = NULL;
+    int msg_len = 0;
+    char msg_part[SEND_BUFFER_SIZE] = {0};
+    int msg_part_len = 0;
 
-	int ok;
+    while (1) {
+        msg_part_len = fread(msg_part, sizeof(char), SEND_BUFFER_SIZE, pipe);
 
-	int64_t rcvmore;
-	size_t rcvmore_size = sizeof(rcvmore);
+        if (msg_part_len) {
+            msg = realloc(msg, (msg_len + msg_part_len + 1) * sizeof(char));
+            memcpy(msg + msg_len, msg_part, msg_part_len);
+            msg_len += msg_part_len;
+        }
 
-	zmq_msg_t msg;
-	zmq_msg_init(&msg);
-	if (ok < 0) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		return;
-	}
+        if (msg_part_len != SEND_BUFFER_SIZE) {
+            break;
+        }
+    }
 
-	// Read single message (all frames) and dump to stdout.
-	do {
-		ok = zmq_recv(socket, &msg, 0);
-		if (ok < 0) {
-			fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-			return;
-		}
+    if (msg_len) {
+        if (verbose) {
+            fprintf(stderr, "sending %d bytes: %s\n", msg_len, msg);
+        }
+        zstr_send(socket, "%s", msg);
+    }
 
-		zmq_getsockopt(socket, ZMQ_RCVMORE, &rcvmore, &rcvmore_size);
-
-		size_t size = zmq_msg_size(&msg);
-		if (verbose)
-			fprintf(stderr, "receiving %ld bytes\n", size);
-
-		fwrite(zmq_msg_data(&msg), 1, size, stdout);
-	} while (rcvmore);
+    free(msg);
 }
 
-void zmqcat_send(void* socket, int type, int verbose) {
-
-	if (type == ZMQ_PULL || type == ZMQ_SUB)
-		return;
-
-	// Read stdin into a forward linked buffer. First
-	// chunk is on the stack, subsequent chunks are
-	// allocated on the heap when necessary.
-
-	char stack_buffer[SEND_BUFFER_SIZE + sizeof(char *)];
-	*(char **)(stack_buffer+SEND_BUFFER_SIZE) = NULL;
-
-	char* buffer = stack_buffer;
-
-	size_t total = 0;
-	while (1) {
-		size_t read = fread(buffer, 1, SEND_BUFFER_SIZE, stdin);
-		total += read;
-
-		if (read != SEND_BUFFER_SIZE)
-			break;
-
-		char *new_buffer = malloc(SEND_BUFFER_SIZE + sizeof(char *));
-		*((char **)&new_buffer[SEND_BUFFER_SIZE]) = NULL;
-		*((char **)&buffer[SEND_BUFFER_SIZE]) = new_buffer;
-		buffer = new_buffer;
-	}
-
-	int ok;
-
-	zmq_msg_t msg;
-	ok = zmq_msg_init_size(&msg, total);
-	if (ok < 0) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		goto dealloc;
-	}
-
-	char *msg_at = (char *)zmq_msg_data(&msg);
-	char *msg_end = msg_at + total;
-
-	buffer = stack_buffer;
-	while (buffer != NULL) {
-		size_t chunk_size = SEND_BUFFER_SIZE;
-		if (msg_at + chunk_size >= msg_end)
-			chunk_size = msg_end - msg_at;
-
-		memcpy(msg_at, buffer, chunk_size);
-
-		buffer = *(char **)&buffer[SEND_BUFFER_SIZE];
-		msg_at += chunk_size;
-	}
-
-	if (verbose)
-		fprintf(stderr, "sending %ld bytes\n", total);
-
-	ok = zmq_send(socket, &msg, 0);
-	if (ok < 0)
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-
-dealloc:
-	buffer = stack_buffer;
-	while (1) {
-		buffer = *(char **)&stack_buffer[SEND_BUFFER_SIZE];
-		if (buffer == NULL)
-			break;
-		free(buffer);
-	}
+void
+print_usage(char *argv[])
+{
+    fprintf(stderr, "usage: %s [-t type] -e endpoint [-b] [-s channel] [-l 20] [-r 0] [-v]\n", argv[0]);
+    fprintf(stderr, "  -t : PUSH | PULL | REQ | REP | PUB | SUB\n");
+    fprintf(stderr, "  -e : endpoint, e.g. \"tcp://127.0.0.1:5000\"\n");
+    fprintf(stderr, "  -b : bind instead of connect\n");
+    fprintf(stderr, "  -s : subscribe to channel for SUB socket\n");
+    fprintf(stderr, "  -l : linger period for socket shutdown in ms\n");
+    fprintf(stderr, "  -r : repeat send and receive cycle X times (-1 = forever)\n");
+    fprintf(stderr, "  -v : verbose output to stderr\n");
 }
 
-int main(int argc, char *argv[]) {
-	
-	int type = ZMQ_PUSH;
-	char *endpoint = NULL;
-	int bind = 0;
-	int verbose = 0;
+int
+main(int argc, char *argv[])
+{
+    int bind = 0;
+    char *endpoint = NULL;
+    int repeat = 1;
+    char *subscribe = "";
+    int type = ZMQ_PUSH;
+    int linger = 20 * 1000;
+    int verbose = 0;
 
-	char c;
-	while ((c = getopt(argc, argv, "t:e:bv")) != -1) {
-		if (c == 't') {
-			if (!strcasecmp(optarg, "pull"))
-				type = ZMQ_PULL;
-			else if (!strcasecmp(optarg, "req"))
-				type = ZMQ_REQ;
-			else if (!strcasecmp(optarg, "rep"))
-				type = ZMQ_REP;
-			else if (!strcasecmp(optarg, "pub"))
-				type = ZMQ_PUB;
-			else if (!strcasecmp(optarg, "sub"))
-				type = ZMQ_PUB;
-		}
-		else if (c == 'e') {
-			endpoint = optarg;
-		}
-		else if (c == 'b') {
-			bind = 1;
-		}
-		else if (c == 'v') {
-			verbose = 1;
-		}
-	}
+    zctx_t *ctx;
+    void *socket;
 
-	if (!endpoint) {
-		fprintf(stderr, "usage: %s [-t type] -e endpoint [-b] [-v]\n", argv[0]);
-		fprintf(stderr, "  -t : PUSH | PULL | REQ | REP | PUB | SUB\n");
-		fprintf(stderr, "  -e : endpoint, e.g. \"tcp://127.0.0.1:5000\"\n");
-		fprintf(stderr, "  -b : bind instead of connect\n");
-		fprintf(stderr, "  -v : verbose output to stderr\n");
-		return 254;
-	}
+    FILE *input = stdin;
+    FILE *output = stdout;
 
-	void *ctx = zmq_init(1);
-	if (ctx == NULL) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		return 1;
-	}
+    char c;
+    while ((c = getopt(argc, argv, "be:l:r:s:t:v")) != -1) {
+        if (c == 'b') {
+            bind = 1;
+        }
+        else if (c == 'e') {
+            endpoint = optarg;
+        }
+        else if (c == 'l') {
+            linger = atoi(optarg) * 1000;
+        }
+        else if (c == 'r') {
+            repeat = atoi(optarg);
+            if (repeat == 0) {
+                repeat = 1;
+            }
+        }
+        else if (c == 's') {
+            subscribe = optarg;
+        }
+        else if (c == 't') {
+            if (!strcasecmp(optarg, "pull")) {
+                type = ZMQ_PULL;
+            }
+            else if (!strcasecmp(optarg, "req")) {
+                type = ZMQ_REQ;
+            }
+            else if (!strcasecmp(optarg, "rep")) {
+                type = ZMQ_REP;
+            }
+            else if (!strcasecmp(optarg, "pub")) {
+                type = ZMQ_PUB;
+            }
+            else if (!strcasecmp(optarg, "sub")) {
+                type = ZMQ_SUB;
+            }
+        }
+        else if (c == 'v') {
+            verbose = 1;
+        }
+        else if (c == ':') {
+            print_usage(argv);
+            return 1;
+        }
+        else if (c == '?') {
+            print_usage(argv);
+            return 1;
+        }
+    }
 
-	void *socket = zmq_socket(ctx, type);
-	if (socket == NULL) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		return 1;
-	}
+    if (!endpoint) {
+        print_usage(argv);
+        return 1;
+    }
 
-	int ok;
+    if ((ctx = zctx_new()) == NULL) {
+        fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
+        return 1;
+    }
 
-	if (bind)
-		ok = zmq_bind(socket, endpoint);
-	else
-		ok = zmq_connect(socket, endpoint);
+    if ((socket = zsocket_new(ctx, type)) == NULL) {
+        fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
+        return 1;
+    }
 
-	if (ok < 0) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		return 1;
-	}
-	
-	if (verbose)
-		fprintf(stderr, "%s to %s\n", (bind ? "bound" : "connecting"), endpoint);
+    if (type == ZMQ_SUB) {
+        zsocket_set_subscribe(socket, subscribe);
+    }
 
-	if (type == ZMQ_REP) {
-		zmqcat_recv(socket, type, verbose);
-		zmqcat_send(socket, type, verbose);
-	}
-	else {
-		zmqcat_send(socket, type, verbose);
-		zmqcat_recv(socket, type, verbose);
-	}
+    if (bind) {
+        zsocket_bind(socket, endpoint);
+    }
+    else {
+        zsocket_connect(socket, endpoint);
+    }
 
-	ok = zmq_close(socket);
-	if (ok < 0) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		return 1;
-	}
+    if (verbose) {
+        fprintf(stderr, "%s to %s\n", (bind ? "bound" : "connecting"), endpoint);
+    }
 
-	ok = zmq_term(ctx);
-	if (ok < 0) {
-		fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
-		return 1;
-	}
+    do {
+        if (type == ZMQ_REP) {
+            zmqcat_recv(socket, type, output, verbose);
+            zmqcat_send(socket, type, input, verbose);
+        }
+        else {
+            zmqcat_send(socket, type, input, verbose);
+            zmqcat_recv(socket, type, output, verbose);
+        }
 
-	return 0;
+        repeat--;
+
+    } while (repeat != 0 && zctx_interrupted != 1);
+
+    zclock_sleep(linger);
+
+    if (ctx && socket) {
+        zsocket_destroy(ctx, socket);
+    }
+
+    if (ctx) {
+        zctx_destroy(&ctx);
+    }
+
+    return 0;
 }
