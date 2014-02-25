@@ -1,5 +1,5 @@
 zmqcat
 *.o
-./Makefile
+/Makefile
 config.log
 config.h
