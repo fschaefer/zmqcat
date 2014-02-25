@@ -128,25 +128,26 @@ main(int argc, char *argv[])
 
     char c;
     while ((c = getopt(argc, argv, "be:l:r:s:t:v")) != -1) {
-        if (c == 'b') {
+        switch (c) {
+        case 'b':
             bind = 1;
-        }
-        else if (c == 'e') {
+            break;
+        case 'e':
             endpoint = optarg;
-        }
-        else if (c == 'l') {
+            break;
+        case 'l':
             linger = atoi(optarg) * 1000;
-        }
-        else if (c == 'r') {
+            break;
+        case 'r':
             repeat = atoi(optarg);
             if (repeat == 0) {
                 repeat = 1;
             }
-        }
-        else if (c == 's') {
+            break;
+        case 's':
             subscribe = optarg;
-        }
-        else if (c == 't') {
+            break;
+        case 't':
             if (!strcasecmp(optarg, "pull")) {
                 type = ZMQ_PULL;
             }
@@ -162,15 +163,11 @@ main(int argc, char *argv[])
             else if (!strcasecmp(optarg, "sub")) {
                 type = ZMQ_SUB;
             }
-        }
-        else if (c == 'v') {
+            break;
+        case 'v':
             verbose = 1;
-        }
-        else if (c == ':') {
-            print_usage(argv);
-            return 1;
-        }
-        else if (c == '?') {
+            break;
+        default:
             print_usage(argv);
             return 1;
         }
