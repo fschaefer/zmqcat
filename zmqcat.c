@@ -72,7 +72,7 @@ zmqcat_send(void* socket, int type, FILE *pipe, int verbose)
     char msg_part[SEND_BUFFER_SIZE] = {0};
     int msg_part_len = 0;
 
-    while (1) {
+    while (!zctx_interrupted) {
         msg_part_len = fread(msg_part, sizeof(char), SEND_BUFFER_SIZE, pipe);
 
         if (msg_part_len) {
@@ -87,10 +87,13 @@ zmqcat_send(void* socket, int type, FILE *pipe, int verbose)
     }
 
     if (msg_len) {
+
+        msg[msg_len] = '\0';
+        zstr_send(socket, "%s", msg);
+
         if (verbose) {
             fprintf(stderr, "sending %d bytes: %s\n", msg_len, msg);
         }
-        zstr_send(socket, "%s", msg);
     }
 
     free(msg);
@@ -148,19 +151,19 @@ main(int argc, char *argv[])
             subscribe = optarg;
             break;
         case 't':
-            if (!strcasecmp(optarg, "pull")) {
+            if (!strcasecmp(optarg, "PULL")) {
                 type = ZMQ_PULL;
             }
-            else if (!strcasecmp(optarg, "req")) {
+            else if (!strcasecmp(optarg, "REQ")) {
                 type = ZMQ_REQ;
             }
-            else if (!strcasecmp(optarg, "rep")) {
+            else if (!strcasecmp(optarg, "REP")) {
                 type = ZMQ_REP;
             }
-            else if (!strcasecmp(optarg, "pub")) {
+            else if (!strcasecmp(optarg, "PUB")) {
                 type = ZMQ_PUB;
             }
-            else if (!strcasecmp(optarg, "sub")) {
+            else if (!strcasecmp(optarg, "SUB")) {
                 type = ZMQ_SUB;
             }
             break;
@@ -193,10 +196,16 @@ main(int argc, char *argv[])
     }
 
     if (bind) {
-        zsocket_bind(socket, endpoint);
+        if (zsocket_bind(socket, endpoint) == -1) {
+            fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
+            return 1;
+        }
     }
     else {
-        zsocket_connect(socket, endpoint);
+        if (zsocket_connect(socket, endpoint) == -1) {
+            fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
+            return 1;
+        }
     }
 
     if (verbose) {
@@ -215,9 +224,11 @@ main(int argc, char *argv[])
 
         repeat--;
 
-    } while (repeat != 0 && zctx_interrupted != 1);
+    } while (repeat != 0 && !zctx_interrupted);
 
-    zclock_sleep(linger);
+    if (!zctx_interrupted) {
+        zclock_sleep(linger);
+    }
 
     if (ctx && socket) {
         zsocket_destroy(ctx, socket);
