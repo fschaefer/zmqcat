@@ -120,7 +120,7 @@ main(int argc, char *argv[])
     int repeat = 1;
     char *subscribe = "";
     int type = ZMQ_PUSH;
-    int linger = 20 * 1000;
+    int linger = 100;
     int verbose = 0;
 
     zctx_t *ctx;
@@ -139,7 +139,7 @@ main(int argc, char *argv[])
             endpoint = optarg;
             break;
         case 'l':
-            linger = atoi(optarg) * 1000;
+            linger = atoi(optarg);
             break;
         case 'r':
             repeat = atoi(optarg);
@@ -186,6 +186,8 @@ main(int argc, char *argv[])
         return 1;
     }
 
+    zctx_set_linger(ctx, linger);
+
     if ((socket = zsocket_new(ctx, type)) == NULL) {
         fprintf(stderr, "error %d: %s\n", errno, zmq_strerror(errno));
         return 1;
@@ -225,10 +227,6 @@ main(int argc, char *argv[])
         repeat--;
 
     } while (repeat != 0 && !zctx_interrupted);
-
-    if (!zctx_interrupted) {
-        zclock_sleep(linger);
-    }
 
     if (ctx && socket) {
         zsocket_destroy(ctx, socket);
