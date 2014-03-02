@@ -53,7 +53,7 @@ zmqcat_recv(void* socket, int type, FILE *pipe, int verbose)
             fprintf(stderr, "receiving %d bytes: %s\n", msg_len, msg);
         }
 
-        fwrite(msg, 1, msg_len, pipe);
+        fwrite(msg, sizeof(char), msg_len, pipe);
         free(msg);
     }
 }
