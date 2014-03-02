@@ -82,6 +82,7 @@ zmqcat_send(void* socket, int type, FILE *pipe, int verbose)
         }
 
         if (msg_part_len != SEND_BUFFER_SIZE) {
+            clearerr(pipe);
             break;
         }
     }
