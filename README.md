@@ -2,14 +2,17 @@ zmqcat
 ======
 Usage speaks more or less for itself.
 
-    usage: ./zmqcat [-t type] -e endpoint [-b] [-s channel] [-l 20] [-r 0] [-v]
-      -t : PUSH | PULL | REQ | REP | PUB | SUB
-      -e : endpoint, e.g. "tcp://127.0.0.1:5000"
-      -b : bind instead of connect
-      -s : subscribe to channel for SUB socket
-      -l : linger period for socket shutdown in ms
-      -r : repeat send or receive X times (-1 = forever)
-      -v : verbose output to stderr
+    zmqcat 1.0
+
+      usage: zmqcat [-b] -e endpoint [-l 20] [-r 1] [-s channel] [-t type] [-v]
+        -b  --bind      : bind instead of connect to endpoint
+        -e  --endpoint  : endpoint, e.g. "tcp://127.0.0.1:5000"
+        -h  --help      : display this usage information
+        -l  --linger    : linger period for socket shutdown in ms
+        -r  --repeat    : repeat send and receive cycle X times (-1 = forever)
+        -s  --subscribe : subscribe to channel for SUB type socket
+        -t  --type      : PUSH | PULL | REQ | REP | PUB | SUB
+        -v  --verbose   : verbose output to stderr
 
 ### License ###
     Copyright 2014 Florian Schäfer <florian.schaefer@gmail.com>

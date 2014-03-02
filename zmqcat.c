@@ -34,6 +34,8 @@
 
 #include <czmq.h>
 
+#include "config.h"
+
 void
 zmqcat_recv(void* socket, int type, FILE *pipe, int verbose)
 {
@@ -101,16 +103,19 @@ zmqcat_send(void* socket, int type, FILE *pipe, int verbose)
 }
 
 void
-print_usage(char *argv[])
+print_usage()
 {
-    fprintf(stderr, "usage: %s [-t type] -e endpoint [-b] [-s channel] [-l 20] [-r 0] [-v]\n", argv[0]);
-    fprintf(stderr, "  -t : PUSH | PULL | REQ | REP | PUB | SUB\n");
-    fprintf(stderr, "  -e : endpoint, e.g. \"tcp://127.0.0.1:5000\"\n");
-    fprintf(stderr, "  -b : bind instead of connect\n");
-    fprintf(stderr, "  -s : subscribe to channel for SUB socket\n");
-    fprintf(stderr, "  -l : linger period for socket shutdown in ms\n");
-    fprintf(stderr, "  -r : repeat send and receive cycle X times (-1 = forever)\n");
-    fprintf(stderr, "  -v : verbose output to stderr\n");
+    fprintf(stderr, "%s %s\n", PACKAGE_NAME, PACKAGE_VERSION);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "  usage: %s [-b] -e endpoint [-l 20] [-r 1] [-s channel] [-t type] [-v]\n", PACKAGE_NAME);
+    fprintf(stderr, "    -b  --bind      : bind instead of connect to endpoint\n");
+    fprintf(stderr, "    -e  --endpoint  : endpoint, e.g. \"tcp://127.0.0.1:5000\"\n");
+    fprintf(stderr, "    -h  --help      : display this usage information\n");
+    fprintf(stderr, "    -l  --linger    : linger period for socket shutdown in ms\n");
+    fprintf(stderr, "    -r  --repeat    : repeat send and receive cycle X times (-1 = forever)\n");
+    fprintf(stderr, "    -s  --subscribe : subscribe to channel for SUB type socket\n");
+    fprintf(stderr, "    -t  --type      : PUSH | PULL | REQ | REP | PUB | SUB\n");
+    fprintf(stderr, "    -v  --verbose   : verbose output to stderr\n");
 }
 
 int
@@ -130,14 +135,30 @@ main(int argc, char *argv[])
     FILE *input = stdin;
     FILE *output = stdout;
 
+    const char* const short_options = "be:hl:r:s:t:v";
+    const struct option long_options[] = {
+        { "bind",      0, NULL, 'b' },
+        { "endpoint",  1, NULL, 'e' },
+        { "help",      0, NULL, 'h' },
+        { "linger",    1, NULL, 'l' },
+        { "repeat",    1, NULL, 'r' },
+        { "subscribe", 1, NULL, 's' },
+        { "type",      1, NULL, 't' },
+        { "verbose",   0, NULL, 'v' },
+        { NULL,        0, NULL,  0  }
+    };
+
     char c;
-    while ((c = getopt(argc, argv, "be:l:r:s:t:v")) != -1) {
+    while ((c = getopt_long(argc, argv, short_options, long_options, NULL)) != -1) {
         switch (c) {
         case 'b':
             bind = 1;
             break;
         case 'e':
             endpoint = optarg;
+            break;
+        case 'h':
+            print_usage();
             break;
         case 'l':
             linger = atoi(optarg);
@@ -172,13 +193,13 @@ main(int argc, char *argv[])
             verbose = 1;
             break;
         default:
-            print_usage(argv);
+            print_usage();
             return 1;
         }
     }
 
     if (!endpoint) {
-        print_usage(argv);
+        print_usage();
         return 1;
     }
 
