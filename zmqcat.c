@@ -56,6 +56,7 @@ zmqcat_recv(void* socket, int type, FILE *pipe, int verbose)
         }
 
         fwrite(msg, sizeof(char), msg_len, pipe);
+        fflush(pipe);
         free(msg);
     }
 }
