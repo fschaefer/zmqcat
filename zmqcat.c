@@ -1,30 +1,34 @@
 /*
- *   Copyright 2014 Florian Schäfer <florian.schaefer@gmail.com>
- *   Copyright 2012 Emiel Mols <emiel@paiq.nl>
+ * Copyright 2014 Florian Schäfer <florian.schaefer@gmail.com>
+ * Copyright 2012 Emiel Mols <emiel@paiq.nl>
  *
- *   Redistribution and use in source and binary forms, with or without modification, are
- *   permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
  *
- *      1. Redistributions of source code must retain the above copyright notice, this list of
- *         conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above
+ *    copyright notice, this list of conditions and the following
+ *    disclaimer in the documentation and/or other materials
+ *    provided with the distribution.
  *
- *      2. Redistributions in binary form must reproduce the above copyright notice, this list
- *         of conditions and the following disclaimer in the documentation and/or other materials
- *         provided with the distribution.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  *
- *   THIS SOFTWARE IS PROVIDED BY <COPYRIGHT HOLDER> ``AS IS'' AND ANY EXPRESS OR IMPLIED
- *   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
- *   FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> OR
- *   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- *   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- *   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- *   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * The views and conclusions contained in the software and documentation
+ * are those of the authors and should not be interpreted as representing
+ * official policies, either expressed or implied, of the copyright holders.
  *
- *   The views and conclusions contained in the software and documentation are those of the
- *   authors and should not be interpreted as representing official policies, either expressed
- *   or implied, of the copyright holders.
  */
 
 #include <stdlib.h>
@@ -108,9 +112,10 @@ print_usage()
 {
     fprintf(stderr, "%s %s\n", PACKAGE_NAME, PACKAGE_VERSION);
     fprintf(stderr, "\n");
-    fprintf(stderr, "  usage: %s [-b] -e endpoint [-l 20] [-r 1] [-s channel] [-t type] [-v]\n", PACKAGE_NAME);
+    fprintf(stderr, "  usage: %s [-b] -e endpoint [-l 20] [-f|-r 1] [-s channel] [-t type] [-v]\n", PACKAGE_NAME);
     fprintf(stderr, "    -b  --bind      : bind instead of connect to endpoint\n");
     fprintf(stderr, "    -e  --endpoint  : endpoint, e.g. \"tcp://127.0.0.1:5000\"\n");
+    fprintf(stderr, "    -f  --forever   : alias for --repeat -1\n");
     fprintf(stderr, "    -h  --help      : display this usage information\n");
     fprintf(stderr, "    -l  --linger    : linger period for socket shutdown in ms\n");
     fprintf(stderr, "    -r  --repeat    : repeat send and receive cycle X times (-1 = forever)\n");
@@ -136,10 +141,11 @@ main(int argc, char *argv[])
     FILE *input = stdin;
     FILE *output = stdout;
 
-    const char* const short_options = "be:hl:r:s:t:v";
+    const char* const short_options = "be:fhl:r:s:t:v";
     const struct option long_options[] = {
         { "bind",      0, NULL, 'b' },
         { "endpoint",  1, NULL, 'e' },
+        { "forever",   0, NULL, 'f' },
         { "help",      0, NULL, 'h' },
         { "linger",    1, NULL, 'l' },
         { "repeat",    1, NULL, 'r' },
@@ -163,6 +169,9 @@ main(int argc, char *argv[])
             break;
         case 'l':
             linger = atoi(optarg);
+            break;
+        case 'f':
+            repeat = -1;
             break;
         case 'r':
             repeat = atoi(optarg);
@@ -246,10 +255,7 @@ main(int argc, char *argv[])
             zmqcat_send(socket, type, input, verbose);
             zmqcat_recv(socket, type, output, verbose);
         }
-
-        repeat--;
-
-    } while (repeat != 0 && !zctx_interrupted);
+    } while (--repeat != 0 && !zctx_interrupted);
 
     if (ctx && socket) {
         zsocket_destroy(ctx, socket);

@@ -7,6 +7,7 @@ Usage speaks more or less for itself.
       usage: zmqcat [-b] -e endpoint [-l 20] [-r 1] [-s channel] [-t type] [-v]
         -b  --bind      : bind instead of connect to endpoint
         -e  --endpoint  : endpoint, e.g. "tcp://127.0.0.1:5000"
+        -f  --forever   : alias for --repeat -1
         -h  --help      : display this usage information
         -l  --linger    : linger period for socket shutdown in ms
         -r  --repeat    : repeat send and receive cycle X times (-1 = forever)
