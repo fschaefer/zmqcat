@@ -255,7 +255,7 @@ main(int argc, char *argv[])
             zmqcat_send(socket, type, input, verbose);
             zmqcat_recv(socket, type, output, verbose);
         }
-    } while (--repeat != 0 && !zctx_interrupted);
+    } while ((repeat < 0 || --repeat != 0) != 0 && !zctx_interrupted);
 
     if (ctx && socket) {
         zsocket_destroy(ctx, socket);
